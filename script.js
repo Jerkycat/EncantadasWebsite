@@ -24,14 +24,11 @@ async function loadEpisodes() {
         const response = await fetch('/static/videos/list.json');
         const fileNames = await response.json();
 
-        // Processa os arquivos de vídeo
         episodesList = fileNames
             .map(fileName => {
-                // Adiciona .mp4 se não tiver extensão
                 const fullFileName = fileName.toLowerCase().endsWith('.mp4') ? fileName : fileName + '.mp4';
                 const nameWithoutExt = fullFileName.replace('.mp4', '');
 
-                // Verifica se é o vídeo promo
                 if (nameWithoutExt.toLowerCase().includes('promo')) {
                     return {
                         type: 'promo',
@@ -41,9 +38,7 @@ async function loadEpisodes() {
                     };
                 }
 
-                // Extrai número e título do episódio (formato: ep0 - Demo Piloto.mp4)
                 const match = nameWithoutExt.match(/ep(\d+)\s*-\s*(.+)/i);
-
                 if (match) {
                     return {
                         type: 'episode',
@@ -53,7 +48,6 @@ async function loadEpisodes() {
                     };
                 }
 
-                // Fallback caso não siga o padrão
                 return {
                     type: 'episode',
                     number: null,
@@ -62,17 +56,14 @@ async function loadEpisodes() {
                 };
             })
             .sort((a, b) => {
-                // Promo sempre primeiro
                 if (a.type === 'promo') return -1;
                 if (b.type === 'promo') return 1;
-                // Ordena por número
                 return (a.number || 0) - (b.number || 0);
             });
 
         console.log('Episódios carregados:', episodesList);
     } catch (error) {
         console.error('Erro ao carregar lista de episódios:', error);
-        // Fallback para o vídeo promo
         episodesList = [{
             type: 'promo',
             number: null,
@@ -94,40 +85,125 @@ function setupNavigation() {
 // Muda de tab
 function switchTab(tab) {
     currentTab = tab;
-
-    // Atualiza classes ativas no menu
     navLinks.forEach(link => link.classList.remove('active'));
     const activeIndex = tab === 'inicio' ? 0 : tab === 'fanarts' ? 1 : 2;
     navLinks[activeIndex].classList.add('active');
-
     renderContent();
 }
 
 // Renderiza o conteúdo baseado na tab atual
 function renderContent() {
     switch (currentTab) {
-        case 'inicio':
-            renderVideoPlayer();
-            break;
-        case 'fanarts':
-            renderFanarts();
-            break;
-        case 'links':
-            renderLinks();
-            break;
+        case 'inicio':   renderVideoPlayer(); break;
+        case 'fanarts':  renderFanarts();     break;
+        case 'links':    renderLinks();       break;
     }
 }
 
-// Renderiza o player de vídeo
+// ── Stats / Interações ────────────────────────────────────────────────────────
+
+function getEpisodeKey(episode) {
+    return episode.fileName.replace('.mp4', '');
+}
+
+async function loadEpisodeStats(episode) {
+    const key = getEpisodeKey(episode);
+    try {
+        const res = await fetch(`/api/stats/${encodeURIComponent(key)}`);
+        const data = await res.json();
+        renderStats(data, key);
+    } catch (e) {
+        console.error('Erro ao carregar stats:', e);
+    }
+}
+
+async function registerView(episode) {
+    const key = getEpisodeKey(episode);
+    try {
+        await fetch(`/api/view/${encodeURIComponent(key)}`, { method: 'POST' });
+        // Atualiza a contagem de views no bloco de stats
+        await loadEpisodeStats(episode);
+    } catch (e) {
+        console.error('Erro ao registrar view:', e);
+    }
+}
+
+function starsDisplay(score) {
+    const full  = Math.floor(score);
+    const half  = (score - full) >= 0.5 ? 1 : 0;
+    const empty = 5 - full - half;
+    return (
+        '<span class="material-symbols-outlined star filled">star</span>'.repeat(full) +
+        (half ? '<span class="material-symbols-outlined star half">star_half</span>' : '') +
+        '<span class="material-symbols-outlined star empty">star</span>'.repeat(empty)
+    );
+}
+
+function renderStats(data, episodeKey) {
+    const container = document.getElementById('stats-container');
+    if (!container) return;
+
+    const userVote = localStorage.getItem(`vote_${episodeKey}`);
+    const stars    = starsDisplay(data.stars);
+    const total    = data.likes + data.dislikes;
+
+    container.innerHTML = `
+        <div class="stats-block">
+            <span class="stat-views">
+                <span class="material-symbols-outlined">visibility</span>
+                ${data.views} view${data.views !== 1 ? 's' : ''}
+            </span>
+
+            <span class="stat-stars" title="${data.stars}/5 baseado em ${total} voto${total !== 1 ? 's' : ''}">
+                ${stars}
+                <small>${data.stars}/5</small>
+            </span>
+
+            <div class="vote-buttons">
+                <button class="vote-btn like-btn ${userVote === 'like' ? 'voted' : ''}"
+                        onclick="vote('${episodeKey}', 'like')"
+                        ${userVote ? 'disabled' : ''}
+                        title="Curtir">
+                    <span class="material-symbols-outlined">thumb_up</span>
+                    ${data.likes}
+                </button>
+                <button class="vote-btn dislike-btn ${userVote === 'dislike' ? 'voted' : ''}"
+                        onclick="vote('${episodeKey}', 'dislike')"
+                        ${userVote ? 'disabled' : ''}
+                        title="Não curtir">
+                    <span class="material-symbols-outlined">thumb_down</span>
+                    ${data.dislikes}
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+async function vote(episodeKey, voteType) {
+    if (localStorage.getItem(`vote_${episodeKey}`)) return;
+
+    try {
+        const res = await fetch(`/api/vote/${encodeURIComponent(episodeKey)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vote: voteType })
+        });
+        const data = await res.json();
+        localStorage.setItem(`vote_${episodeKey}`, voteType);
+        renderStats(data, episodeKey);
+    } catch (e) {
+        console.error('Erro ao votar:', e);
+    }
+}
+
+// ── Player de vídeo ───────────────────────────────────────────────────────────
+
 function renderVideoPlayer() {
     if (episodesList.length === 0) {
-        mainElement.innerHTML = `
-            <div class="loading-message">Carregando episódios...</div>
-        `;
+        mainElement.innerHTML = `<div class="loading-message">Carregando episódios...</div>`;
         return;
     }
 
-    // Se nenhum episódio selecionado, pega o promo ou o primeiro da lista
     let selectedEpisode;
     if (currentEpisode === null) {
         selectedEpisode = episodesList.find(ep => ep.type === 'promo') || episodesList[0];
@@ -135,10 +211,9 @@ function renderVideoPlayer() {
         selectedEpisode = episodesList[currentEpisode];
     }
 
-    const videoSource = `/static/videos/${selectedEpisode.fileName}`;
+    const videoSource  = `/static/videos/${selectedEpisode.fileName}`;
     const episodeTitle = selectedEpisode.title;
 
-    // Pausa e limpa o vídeo anterior se existir
     const oldVideo = document.querySelector('.video-element');
     if (oldVideo) {
         oldVideo.pause();
@@ -152,7 +227,7 @@ function renderVideoPlayer() {
                 <button class="nav-arrow left" id="prevBtn">
                     <span class="material-symbols-outlined">chevron_left</span>
                 </button>
-                
+
                 <div class="video-player">
                     <video controls class="video-element" preload="metadata">
                         <source src="${videoSource}" type="video/mp4">
@@ -169,6 +244,8 @@ function renderVideoPlayer() {
                 <h2>${episodeTitle}</h2>
             </div>
 
+            <div id="stats-container"></div>
+
             <div class="episode-selector">
                 <div class="selector-label">Selecione o Episódio:</div>
                 <div class="episode-grid" id="episodeGrid">
@@ -178,38 +255,41 @@ function renderVideoPlayer() {
         </div>
     `;
 
-    // Adiciona eventos aos botões
+    // Navegação
     document.getElementById('prevBtn').addEventListener('click', handlePrevEpisode);
     document.getElementById('nextBtn').addEventListener('click', handleNextEpisode);
 
-    // Adiciona eventos aos botões de episódios
+    // Botões de episódio
     document.querySelectorAll('.episode-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            // Usa currentTarget ao invés de target para sempre pegar o botão, não o elemento clicado dentro dele
             const index = parseInt(e.currentTarget.dataset.index);
             currentEpisode = index;
             renderVideoPlayer();
         });
     });
 
-    // Força o carregamento do novo vídeo
+    // Carrega o novo vídeo
     const newVideo = document.querySelector('.video-element');
     if (newVideo) {
         newVideo.load();
+        // Registra view apenas uma vez por sessão de reprodução
+        newVideo.addEventListener('play', () => registerView(selectedEpisode), { once: true });
     }
+
+    // Carrega stats imediatamente
+    loadEpisodeStats(selectedEpisode);
 }
 
 // Gera os botões de episódios
 function generateEpisodeButtons() {
     return episodesList.map((episode, index) => {
         const isActive = currentEpisode === index || (currentEpisode === null && episode.type === 'promo');
-        const label = episode.type === 'promo' ? 'PROMO' : `EP ${episode.number}`;
-
-        // Adiciona estrela para o episódio 11 (Super Pitoca)
-        const starIcon = [6, 11, 14].includes(episode.number) ? ' <span class="material-symbols-outlined">star</span>' : '';
+        const label    = episode.type === 'promo' ? 'PROMO' : `EP ${episode.number}`;
+        const starIcon = [6, 11, 14].includes(episode.number)
+            ? ' <span class="material-symbols-outlined">star</span>' : '';
 
         return `
-            <button class="episode-btn ${isActive ? 'active' : ''}" 
+            <button class="episode-btn ${isActive ? 'active' : ''}"
                     data-index="${index}"
                     title="${episode.title}">
                 ${label}${starIcon}
@@ -221,7 +301,6 @@ function generateEpisodeButtons() {
 // Navega para o episódio anterior
 function handlePrevEpisode() {
     if (episodesList.length === 0) return;
-
     if (currentEpisode === null || currentEpisode === 0) {
         currentEpisode = episodesList.length - 1;
     } else {
@@ -233,7 +312,6 @@ function handlePrevEpisode() {
 // Navega para o próximo episódio
 function handleNextEpisode() {
     if (episodesList.length === 0) return;
-
     if (currentEpisode === null) {
         currentEpisode = 0;
     } else if (currentEpisode >= episodesList.length - 1) {
@@ -244,7 +322,8 @@ function handleNextEpisode() {
     renderVideoPlayer();
 }
 
-// Renderiza a galeria de fanarts
+// ── Fanarts ───────────────────────────────────────────────────────────────────
+
 async function renderFanarts() {
     mainElement.innerHTML = `
         <div class="fanarts-container">
@@ -255,10 +334,10 @@ async function renderFanarts() {
     `;
 
     try {
-        const response = await fetch('/static/imgs/fanarts/list.json');
+        const response  = await fetch('/static/imgs/fanarts/list.json');
         const fileNames = await response.json();
 
-        const mediaWrapper = document.querySelector('.media-wrapper');
+        const mediaWrapper   = document.querySelector('.media-wrapper');
         const loadingMessage = document.querySelector('.loading-message');
 
         if (fileNames.length === 0) {
@@ -273,10 +352,7 @@ async function renderFanarts() {
             const fanartItem = document.createElement('div');
             fanartItem.className = 'fanart-item';
             fanartItem.innerHTML = `
-                <img src="${imagePath}" 
-                     alt="${fileName}"
-                     title="${fileName}"
-                     loading="lazy">
+                <img src="${imagePath}" alt="${fileName}" title="${fileName}" loading="lazy">
             `;
             mediaWrapper.appendChild(fanartItem);
         });
@@ -288,7 +364,8 @@ async function renderFanarts() {
     }
 }
 
-// Renderiza a página de links
+// ── Links ─────────────────────────────────────────────────────────────────────
+
 function renderLinks() {
     mainElement.innerHTML = `
         <div class="links-container">
@@ -326,7 +403,8 @@ function renderLinks() {
     `;
 }
 
-// Inicia quando o DOM estiver pronto
+// ── Init ──────────────────────────────────────────────────────────────────────
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {

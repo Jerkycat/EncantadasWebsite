@@ -83,7 +83,6 @@ header section a {
     cursor: pointer;
 }
 
-/* Estilo para link ativo no header */
 header section a.active {
     background-color: var(--ui-c2);
     color: var(--ui-c1);
@@ -165,6 +164,107 @@ main {
     color: var(--ui-c1);
     border: 4px solid var(--ui-c1);
 }
+
+/* ── Stats Block ─────────────────────────────────────────────────────────── */
+
+.stats-block {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--ui-c2);
+    color: var(--ui-c2);
+    font-family: headerfont;
+}
+
+.stat-views {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 1rem;
+    letter-spacing: 1px;
+}
+
+.stat-views .material-symbols-outlined {
+    font-size: 1.25rem;
+}
+
+.stat-stars {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.stat-stars .star {
+    font-size: 1.25rem;
+}
+
+.stat-stars .star.filled {
+    color: gold;
+}
+
+.stat-stars .star.half {
+    color: gold;
+}
+
+.stat-stars .star.empty {
+    color: #555;
+}
+
+.stat-stars small {
+    margin-left: 0.25rem;
+    font-size: 0.85rem;
+    opacity: 0.75;
+    font-family: sans-serif;
+}
+
+.vote-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.vote-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: transparent;
+    border: 2px solid var(--ui-c2);
+    color: var(--ui-c2);
+    padding: 0.4rem 0.85rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: bold;
+    font-family: headerfont;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+}
+
+.vote-btn .material-symbols-outlined {
+    font-size: 1.1rem;
+}
+
+.vote-btn:hover:not(:disabled) {
+    background-color: var(--ui-c2);
+    color: var(--ui-c1);
+}
+
+.vote-btn:disabled {
+    cursor: not-allowed;
+}
+
+.like-btn.voted {
+    border-color: #4caf50;
+    color: #4caf50;
+}
+
+.dislike-btn.voted {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+/* ── Episode Selector ────────────────────────────────────────────────────── */
 
 .episode-selector {
     display: flex;
@@ -323,20 +423,18 @@ main {
 }
 
 @media (max-width: 768px) {
-    
+
     body {
         padding: 0.75rem;
     }
 
     header section:first-child {
         height: 2rem;
-
         font-size: 1.25rem;
     }
 
     header section:nth-child(2) {
         height: 2.5rem;
-
         font-size: 1.5rem;
     }
 
@@ -359,6 +457,20 @@ main {
 
     .links-content a img {
         max-height: 2rem;
+    }
+
+    .stats-block {
+        gap: 0.75rem;
+    }
+
+    .vote-buttons {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .vote-btn {
+        flex: 1;
+        justify-content: center;
     }
 }
 
