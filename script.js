@@ -78,15 +78,16 @@ async function loadEpisodes() {
 // Configura os eventos de navegação
 function setupNavigation() {
     navLinks[0].addEventListener('click', () => switchTab('inicio'));
-    navLinks[1].addEventListener('click', () => switchTab('fanarts'));
-    navLinks[2].addEventListener('click', () => switchTab('links'));
+    navLinks[1].addEventListener('click', () => switchTab('rankings'));
+    navLinks[2].addEventListener('click', () => switchTab('fanarts'));
+    navLinks[3].addEventListener('click', () => switchTab('links'));
 }
 
 // Muda de tab
 function switchTab(tab) {
     currentTab = tab;
     navLinks.forEach(link => link.classList.remove('active'));
-    const activeIndex = tab === 'inicio' ? 0 : tab === 'fanarts' ? 1 : 2;
+    const activeIndex = { inicio: 0, rankings: 1, fanarts: 2, links: 3 }[tab];
     navLinks[activeIndex].classList.add('active');
     renderContent();
 }
@@ -94,9 +95,10 @@ function switchTab(tab) {
 // Renderiza o conteúdo baseado na tab atual
 function renderContent() {
     switch (currentTab) {
-        case 'inicio':   renderVideoPlayer(); break;
-        case 'fanarts':  renderFanarts();     break;
-        case 'links':    renderLinks();       break;
+        case 'inicio':    renderVideoPlayer(); break;
+        case 'rankings':  renderRankings();    break;
+        case 'fanarts':   renderFanarts();     break;
+        case 'links':     renderLinks();       break;
     }
 }
 
@@ -119,9 +121,13 @@ async function loadEpisodeStats(episode) {
 
 async function registerView(episode) {
     const key = getEpisodeKey(episode);
+
+    // Só registra se ainda não assistiu nesta sessão/dispositivo
+    if (localStorage.getItem(`viewed_${key}`)) return;
+
     try {
         await fetch(`/api/view/${encodeURIComponent(key)}`, { method: 'POST' });
-        // Atualiza a contagem de views no bloco de stats
+        localStorage.setItem(`viewed_${key}`, '1');
         await loadEpisodeStats(episode);
     } catch (e) {
         console.error('Erro ao registrar view:', e);
@@ -193,6 +199,104 @@ async function vote(episodeKey, voteType) {
         renderStats(data, episodeKey);
     } catch (e) {
         console.error('Erro ao votar:', e);
+    }
+}
+
+// ── Rankings ──────────────────────────────────────────────────────────────────
+
+async function renderRankings() {
+    mainElement.innerHTML = `
+        <div class="rankings-container">
+            <h2 class="section-title">RANKINGS</h2>
+            <div class="loading-message">Carregando rankings...</div>
+        </div>
+    `;
+
+    const episodes = episodesList.filter(ep => ep.type !== 'promo');
+
+    if (episodes.length === 0) {
+        document.querySelector('.loading-message').textContent = 'Nenhum episódio encontrado.';
+        return;
+    }
+
+    try {
+        // Busca stats de todos os episódios em paralelo
+        const statsPromises = episodes.map(async ep => {
+            const key = getEpisodeKey(ep);
+            try {
+                const res = await fetch(`/api/stats/${encodeURIComponent(key)}`);
+                const data = await res.json();
+                return { ...ep, stats: data };
+            } catch {
+                return { ...ep, stats: { views: 0, likes: 0, dislikes: 0, stars: 0 } };
+            }
+        });
+
+        const results = await Promise.all(statsPromises);
+
+        // Ordena por estrelas (desc), com views como desempate
+        results.sort((a, b) => {
+            if (b.stats.stars !== a.stats.stars) return b.stats.stars - a.stats.stars;
+            return b.stats.views - a.stats.views;
+        });
+
+        const container = document.querySelector('.rankings-container');
+        const loadingMsg = container.querySelector('.loading-message');
+        loadingMsg.remove();
+
+        const table = document.createElement('div');
+        table.className = 'rankings-table';
+
+        table.innerHTML = `
+            <div class="rankings-header">
+                <span class="rank-col">#</span>
+                <span class="title-col">Episódio</span>
+                <span class="views-col">
+                    <span class="material-symbols-outlined">visibility</span>
+                </span>
+                <span class="stars-col">Avaliação</span>
+            </div>
+            ${results.map((ep, i) => {
+                const stars = starsDisplay(ep.stats.stars);
+                const medal = i === 0 ? 'emoji_events' : i === 1 ? 'workspace_premium' : i === 2 ? 'military_tech' : null;
+                const rankDisplay = medal
+                    ? `<span class="material-symbols-outlined medal rank-${i + 1}">${medal}</span>`
+                    : `<span class="rank-number">${i + 1}</span>`;
+
+                return `
+                    <div class="rankings-row ${i < 3 ? 'top-' + (i + 1) : ''}"
+                         onclick="goToEpisode('${ep.fileName}')">
+                        <span class="rank-col">${rankDisplay}</span>
+                        <span class="title-col">
+                            <span class="ep-label">EP ${ep.number}</span>
+                            <span class="ep-name">${ep.title}</span>
+                        </span>
+                        <span class="views-col">
+                            ${ep.stats.views} <small>view${ep.stats.views !== 1 ? 's' : ''}</small>
+                        </span>
+                        <span class="stars-col">
+                            <span class="stars-row">${stars}</span>
+                            <small>${ep.stats.stars}/5</small>
+                        </span>
+                    </div>
+                `;
+            }).join('')}
+        `;
+
+        container.appendChild(table);
+
+    } catch (error) {
+        console.error('Erro ao carregar rankings:', error);
+        document.querySelector('.loading-message').textContent = 'Erro ao carregar rankings.';
+    }
+}
+
+// Vai para um episódio específico a partir do ranking
+function goToEpisode(fileName) {
+    const index = episodesList.findIndex(ep => ep.fileName === fileName);
+    if (index !== -1) {
+        currentEpisode = index;
+        switchTab('inicio');
     }
 }
 
@@ -272,7 +376,7 @@ function renderVideoPlayer() {
     const newVideo = document.querySelector('.video-element');
     if (newVideo) {
         newVideo.load();
-        // Registra view apenas uma vez por sessão de reprodução
+        // Registra view uma única vez por episódio (persistido no localStorage)
         newVideo.addEventListener('play', () => registerView(selectedEpisode), { once: true });
     }
 

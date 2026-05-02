@@ -321,6 +321,169 @@ main {
     border-width: 3px;
 }
 
+/* ── Rankings ────────────────────────────────────────────────────────────── */
+
+.rankings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.rankings-table {
+    display: flex;
+    flex-direction: column;
+    border: 2px solid var(--ui-c2);
+    font-family: headerfont;
+}
+
+.rankings-header {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr 7rem 10rem;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 1rem;
+    background-color: var(--ui-c2);
+    color: var(--ui-c1);
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--ui-c1);
+}
+
+.rankings-header .views-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rankings-header .views-col .material-symbols-outlined {
+    font-size: 1.1rem;
+}
+
+.rankings-row {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr 7rem 10rem;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    color: var(--ui-c2);
+    border-bottom: 1px solid rgba(253, 252, 234, 0.15);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.rankings-row:last-child {
+    border-bottom: none;
+}
+
+.rankings-row:hover {
+    background-color: rgba(253, 252, 234, 0.07);
+}
+
+/* Top 3 destaques */
+.rankings-row.top-1 {
+    background-color: rgba(255, 215, 0, 0.08);
+}
+
+.rankings-row.top-2 {
+    background-color: rgba(192, 192, 192, 0.06);
+}
+
+.rankings-row.top-3 {
+    background-color: rgba(205, 127, 50, 0.06);
+}
+
+.rankings-row.top-1:hover { background-color: rgba(255, 215, 0, 0.14); }
+.rankings-row.top-2:hover { background-color: rgba(192, 192, 192, 0.12); }
+.rankings-row.top-3:hover { background-color: rgba(205, 127, 50, 0.12); }
+
+/* Colunas */
+.rank-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.rank-number {
+    font-size: 1rem;
+    opacity: 0.6;
+}
+
+.medal {
+    font-size: 1.6rem !important;
+}
+
+.medal.rank-1 { color: gold; }
+.medal.rank-2 { color: silver; }
+.medal.rank-3 { color: #cd7f32; }
+
+.title-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.ep-label {
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    opacity: 0.6;
+    text-transform: uppercase;
+}
+
+.ep-name {
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.views-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.views-col small {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    font-family: sans-serif;
+}
+
+.stars-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+}
+
+.stars-row {
+    display: flex;
+    align-items: center;
+    gap: 0.05rem;
+}
+
+.stars-row .star {
+    font-size: 1rem;
+}
+
+.stars-row .star.filled { color: gold; }
+.stars-row .star.half   { color: gold; }
+.stars-row .star.empty  { color: #555; }
+
+.stars-col small {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    font-family: sans-serif;
+    margin-left: 0.1rem;
+}
+
 /* Fanarts Styles */
 .fanarts-container {
     display: flex;
@@ -415,6 +578,16 @@ main {
     max-height: 4rem;
 }
 
+/* Loading */
+.loading-message {
+    color: var(--ui-c2);
+    text-align: center;
+    padding: 3rem;
+    font-family: headerfont;
+    letter-spacing: 2px;
+    opacity: 0.6;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .media-wrapper {
@@ -472,6 +645,21 @@ main {
         flex: 1;
         justify-content: center;
     }
+
+    .rankings-header,
+    .rankings-row {
+        grid-template-columns: 2.5rem 1fr 5rem 8rem;
+        gap: 0.5rem;
+        padding: 0.7rem 0.6rem;
+    }
+
+    .ep-name {
+        font-size: 0.9rem;
+    }
+
+    .views-col {
+        font-size: 0.85rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -486,5 +674,18 @@ main {
 
     .nav-arrow {
         width: 100%;
+    }
+
+    .rankings-header,
+    .rankings-row {
+        grid-template-columns: 2rem 1fr 4.5rem;
+        gap: 0.4rem;
+        padding: 0.65rem 0.5rem;
+    }
+
+    /* Esconde coluna de estrelas em telas muito pequenas, mostra só views */
+    .rankings-header .stars-col,
+    .rankings-row .stars-col {
+        display: none;
     }
 }
