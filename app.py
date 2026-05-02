@@ -26,11 +26,11 @@ def init_db():
 
 
 def wilson_score(likes, dislikes):
-    """Converte likes/dislikes para 0-5 usando Wilson score (95% confiança)."""
+    """Converte likes/dislikes para 0-5 usando Wilson score (80% confiança)."""
     n = likes + dislikes
     if n == 0:
         return 0.0
-    z = 1.96
+    z = 1.28
     p = likes / n
     score = (p + z*z/(2*n) - z * math.sqrt((p*(1-p) + z*z/(4*n)) / n)) / (1 + z*z/n)
     return round(score * 5, 2)
