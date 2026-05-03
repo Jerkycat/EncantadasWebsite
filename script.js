@@ -14,9 +14,9 @@ function emitPlaybackStart(episodeKey) {
     else socket.once('connect', run);
 }
 
-function emitPlaybackThreshold(episodeKey) {
+function emitPlaybackComplete(episodeKey) {
     if (!socket) return;
-    const run = () => socket.emit('playback_threshold_reached', { episode: episodeKey });
+    const run = () => socket.emit('playback_complete', { episode: episodeKey });
     if (socket.connected) run();
     else socket.once('connect', run);
 }
@@ -404,40 +404,8 @@ function renderVideoPlayer() {
     if (newVideo) {
         newVideo.load();
         const epKey = getEpisodeKey(selectedEpisode);
-
-        let watchedSeconds   = 0;
-        let lastTimeUpdate   = null;
-        let isPlaying        = false;
-        let thresholdReached = false;
-
-        newVideo.addEventListener('play', () => {
-            isPlaying      = true;
-            lastTimeUpdate = newVideo.currentTime;
-            emitPlaybackStart(epKey);
-        });
-
-        newVideo.addEventListener('pause', () => {
-            isPlaying      = false;
-            lastTimeUpdate = null;
-        });
-
-        // Reseta o ponto de referência em seeks para não contar o salto como tempo assistido
-        newVideo.addEventListener('seeking', () => { lastTimeUpdate = null; });
-        newVideo.addEventListener('seeked',  () => { if (isPlaying) lastTimeUpdate = newVideo.currentTime; });
-
-        newVideo.addEventListener('timeupdate', () => {
-            if (thresholdReached || !isPlaying || lastTimeUpdate === null) return;
-
-            const delta = newVideo.currentTime - lastTimeUpdate;
-            // Só acumula avanços pequenos (≤ 1 s) para ignorar seeks residuais
-            if (delta > 0 && delta < 1.0) watchedSeconds += delta;
-            lastTimeUpdate = newVideo.currentTime;
-
-            if (watchedSeconds >= 5) {
-                thresholdReached = true;
-                emitPlaybackThreshold(epKey);
-            }
-        });
+        newVideo.addEventListener('play', () => emitPlaybackStart(epKey));
+        newVideo.addEventListener('ended', () => emitPlaybackComplete(epKey));
     }
 
     // Carrega stats imediatamente
