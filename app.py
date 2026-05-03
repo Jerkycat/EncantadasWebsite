@@ -20,7 +20,7 @@ if os.environ.get('SESSION_COOKIE_SECURE', '').lower() in ('1', 'true', 'yes'):
 
 socketio = SocketIO(app, async_mode='threading')
 
-_EPISODE_KEY_RE = re.compile(r'^[a-zA-Z0-9_.-]{1,200}$')
+_EPISODE_KEY_RE = re.compile(r'^[a-zA-Z0-9_.\- ]{1,200}$')
 
 # Sessão Flask = cookie assinado (itsdangerous). Só usamos started_at / ended_at do servidor.
 _MIN_ELAPSED_SECONDS = 3
