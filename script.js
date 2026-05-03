@@ -4,6 +4,48 @@ let currentEpisode = null;
 let episodesList = [];
 let isLoadingEpisodes = false;
 
+// Socket.IO: o backend grava início/fim na sessão Flask (cookie assinado); o cliente só avisa play/ended.
+const socket = typeof io !== 'undefined' ? io({ transports: ['websocket', 'polling'] }) : null;
+
+function emitPlaybackStart(episodeKey) {
+    if (!socket) return;
+    const run = () => socket.emit('playback_start', { episode: episodeKey });
+    if (socket.connected) run();
+    else socket.once('connect', run);
+}
+
+function emitPlaybackComplete(episodeKey) {
+    if (!socket) return;
+    const run = () => socket.emit('playback_complete', { episode: episodeKey });
+    if (socket.connected) run();
+    else socket.once('connect', run);
+}
+
+function updateViewsInDom(episodeKey, views) {
+    const esc = episodeKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const statEl = document.querySelector(`#stats-container .stat-views[data-episode-key="${esc}"]`);
+    if (statEl) {
+        statEl.innerHTML = `
+                <span class="material-symbols-outlined">visibility</span>
+                ${views} view${views !== 1 ? 's' : ''}
+            `;
+    }
+    const rankEl = document.querySelector(`.rankings-table .views-col[data-episode-key="${esc}"]`);
+    if (rankEl) {
+        rankEl.innerHTML = `${views} <small>view${views !== 1 ? 's' : ''}</small>`;
+    }
+}
+
+if (socket) {
+    socket.on('view_count_updated', ({ episode, views }) => {
+        if (episode != null && views != null) updateViewsInDom(episode, views);
+    });
+
+    socket.on('view_accepted', ({ episode, views }) => {
+        if (episode != null && views != null) updateViewsInDom(episode, views);
+    });
+}
+
 // Elementos do DOM
 const mainElement = document.querySelector('main');
 const navLinks = document.querySelectorAll('header section:last-child a');
@@ -119,21 +161,6 @@ async function loadEpisodeStats(episode) {
     }
 }
 
-async function registerView(episode) {
-    const key = getEpisodeKey(episode);
-
-    // Só registra se ainda não assistiu nesta sessão/dispositivo
-    if (localStorage.getItem(`viewed_${key}`)) return;
-
-    try {
-        await fetch(`/api/view/${encodeURIComponent(key)}`, { method: 'POST' });
-        localStorage.setItem(`viewed_${key}`, '1');
-        await loadEpisodeStats(episode);
-    } catch (e) {
-        console.error('Erro ao registrar view:', e);
-    }
-}
-
 function starsDisplay(score) {
     const full  = Math.floor(score);
     const half  = (score - full) >= 0.5 ? 1 : 0;
@@ -155,7 +182,7 @@ function renderStats(data, episodeKey) {
 
     container.innerHTML = `
         <div class="stats-block">
-            <span class="stat-views">
+            <span class="stat-views" data-episode-key="${episodeKey}">
                 <span class="material-symbols-outlined">visibility</span>
                 ${data.views} view${data.views !== 1 ? 's' : ''}
             </span>
@@ -271,7 +298,7 @@ async function renderRankings() {
                             <span class="ep-label">EP ${ep.number}</span>
                             <span class="ep-name">${ep.title}</span>
                         </span>
-                        <span class="views-col">
+                        <span class="views-col" data-episode-key="${getEpisodeKey(ep)}">
                             ${ep.stats.views} <small>view${ep.stats.views !== 1 ? 's' : ''}</small>
                         </span>
                         <span class="stars-col">
@@ -376,8 +403,9 @@ function renderVideoPlayer() {
     const newVideo = document.querySelector('.video-element');
     if (newVideo) {
         newVideo.load();
-        // Registra view uma única vez por episódio (persistido no localStorage)
-        newVideo.addEventListener('play', () => registerView(selectedEpisode), { once: true });
+        const epKey = getEpisodeKey(selectedEpisode);
+        newVideo.addEventListener('play', () => emitPlaybackStart(epKey));
+        newVideo.addEventListener('ended', () => emitPlaybackComplete(epKey));
     }
 
     // Carrega stats imediatamente
