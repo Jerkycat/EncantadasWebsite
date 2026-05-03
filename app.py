@@ -23,7 +23,7 @@ socketio = SocketIO(app, async_mode='threading')
 _EPISODE_KEY_RE = re.compile(r'^[\w\s.()\-\u00C0-\u024F]{1,200}$', re.UNICODE)
 
 # Sessão Flask = cookie assinado (itsdangerous). Só usamos started_at / ended_at do servidor.
-_MIN_ELAPSED_SECONDS = 3
+_MIN_ELAPSED_SECONDS = 5
 _MAX_ELAPSED_SECONDS = 6 * 3600
 
 
@@ -158,8 +158,8 @@ def on_playback_start(data):
     session.modified = True
 
 
-@socketio.on('playback_complete')
-def on_playback_complete(data):
+@socketio.on('playback_threshold_reached')
+def on_playback_threshold_reached(data):
     if not isinstance(data, dict):
         return
     episode = data.get('episode')
@@ -185,17 +185,10 @@ def on_playback_complete(data):
         return
 
     ended_at = time.time()
-    info['ended_at'] = ended_at
-    pb[episode] = info
-    session['playback'] = pb
-    session.modified = True
+    elapsed  = ended_at - started_at
 
-    elapsed = ended_at - started_at
+    # Validação server-side: o cliente deve ter assistido ≥ 5 s desde o play
     if elapsed < _MIN_ELAPSED_SECONDS:
-        info.pop('ended_at', None)
-        pb[episode] = info
-        session['playback'] = pb
-        session.modified = True
         emit('view_rejected', {'episode': episode, 'code': 'too_short'})
         return
 
