@@ -50,10 +50,120 @@ if (socket) {
 const mainElement = document.querySelector('main');
 const navLinks = document.querySelectorAll('header section:last-child a');
 
+// ── Roteamento via History API ────────────────────────────────────────────────
+
+/**
+ * Interpreta o pathname atual e retorna um objeto com tab e informações do episódio.
+ */
+function parseUrlState() {
+    const path = window.location.pathname;
+
+    // Tabs simples
+    const tabMatch = path.match(/^\/(rankings|fanarts|links)\/?$/);
+    if (tabMatch) return { tab: tabMatch[1] };
+
+    // /promo
+    if (/^\/promo\/?$/i.test(path)) return { tab: 'inicio', episodeType: 'promo' };
+
+    // /ep10 ou /ep0
+    const epMatch = path.match(/^\/ep(\d+)\/?$/i);
+    if (epMatch) return { tab: 'inicio', episodeNumber: parseInt(epMatch[1]) };
+
+    // / ou qualquer outra coisa → início
+    return { tab: 'inicio', episodeIndex: null };
+}
+
+/**
+ * Depois de carregar os episódios, resolve o índice correto a partir do estado da URL.
+ */
+function resolveEpisodeIndex(urlState) {
+    if (!urlState || urlState.tab !== 'inicio') return null;
+
+    if (urlState.episodeNumber !== undefined) {
+        const idx = episodesList.findIndex(ep => ep.number === urlState.episodeNumber);
+        return idx !== -1 ? idx : null;
+    }
+    if (urlState.episodeType === 'promo') {
+        const idx = episodesList.findIndex(ep => ep.type === 'promo');
+        return idx !== -1 ? idx : null;
+    }
+    if (urlState.episodeIndex !== undefined) return urlState.episodeIndex;
+
+    return null; // padrão → exibe o promo
+}
+
+/**
+ * Monta a URL correta para o estado (tab + índice de episódio).
+ */
+function buildUrl(tab, episodeIndex) {
+    if (tab !== 'inicio') return `/${tab}`;
+    if (episodeIndex === null || episodeIndex === undefined) return '/';
+
+    const ep = episodesList[episodeIndex];
+    if (!ep) return '/';
+    if (ep.type === 'promo') return '/promo';
+    // Usa !== null para cobrir ep0 (zero é falsy em JS, mas é um número válido)
+    if (ep.number !== null && ep.number !== undefined) return `/ep${ep.number}`;
+    return '/';
+}
+
+/**
+ * Atualiza a classe .active dos links de navegação.
+ */
+function updateNavActive() {
+    navLinks.forEach(link => link.classList.remove('active'));
+    const idx = { inicio: 0, rankings: 1, fanarts: 2, links: 3 }[currentTab];
+    if (idx !== undefined) navLinks[idx].classList.add('active');
+}
+
+/**
+ * Navega para um episódio específico dentro de /inicio, atualiza a URL e re-renderiza.
+ */
+function navigateToEpisode(index) {
+    currentEpisode = index;
+    const url = buildUrl('inicio', index);
+    history.pushState({ tab: 'inicio', episode: index }, '', url);
+    renderVideoPlayer();
+}
+
+// Captura navegação pelo botão Voltar/Avançar do browser
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.tab) {
+        currentTab = e.state.tab;
+        currentEpisode = (e.state.episode !== undefined && e.state.episode !== null)
+            ? e.state.episode
+            : null;
+    } else {
+        // Sem state guardado: relê a URL (ex.: entrada direta no histórico)
+        const urlState = parseUrlState();
+        currentTab = urlState.tab || 'inicio';
+        currentEpisode = resolveEpisodeIndex(urlState);
+    }
+    updateNavActive();
+    renderContent();
+});
+
 // Inicializa a aplicação
 async function init() {
+    const urlState = parseUrlState();
+    currentTab = urlState.tab || 'inicio';
+
+    // Mostra a aba certa imediatamente (antes de carregar episódios)
+    updateNavActive();
     setupNavigation();
+
     await loadEpisodes();
+
+    // Resolve índice do episódio agora que a lista está carregada
+    if (currentTab === 'inicio') {
+        currentEpisode = resolveEpisodeIndex(urlState);
+    }
+
+    // Normaliza URL: grava estado inicial e redireciona legado /inicio -> /
+    const rawPath = window.location.pathname;
+    const canonicalUrl = /^\/inicio\/?$/i.test(rawPath) ? '/' : rawPath;
+    history.replaceState({ tab: currentTab, episode: currentEpisode }, '', canonicalUrl);
+
     renderContent();
 }
 
@@ -125,12 +235,15 @@ function setupNavigation() {
     navLinks[3].addEventListener('click', () => switchTab('links'));
 }
 
-// Muda de tab
+// Muda de tab e atualiza a URL
 function switchTab(tab) {
     currentTab = tab;
-    navLinks.forEach(link => link.classList.remove('active'));
-    const activeIndex = { inicio: 0, rankings: 1, fanarts: 2, links: 3 }[tab];
-    navLinks[activeIndex].classList.add('active');
+    updateNavActive();
+
+    // Ao voltar para /inicio, mantém o episódio que estava selecionado
+    const url = buildUrl(tab, tab === 'inicio' ? currentEpisode : null);
+    history.pushState({ tab, episode: currentEpisode }, '', url);
+
     renderContent();
 }
 
@@ -390,12 +503,10 @@ function renderVideoPlayer() {
     document.getElementById('prevBtn').addEventListener('click', handlePrevEpisode);
     document.getElementById('nextBtn').addEventListener('click', handleNextEpisode);
 
-    // Botões de episódio
+    // Botões de episódio — usam navigateToEpisode para atualizar a URL
     document.querySelectorAll('.episode-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const index = parseInt(e.currentTarget.dataset.index);
-            currentEpisode = index;
-            renderVideoPlayer();
+            navigateToEpisode(parseInt(e.currentTarget.dataset.index));
         });
     });
 
@@ -433,25 +544,27 @@ function generateEpisodeButtons() {
 // Navega para o episódio anterior
 function handlePrevEpisode() {
     if (episodesList.length === 0) return;
+    let newIndex;
     if (currentEpisode === null || currentEpisode === 0) {
-        currentEpisode = episodesList.length - 1;
+        newIndex = episodesList.length - 1;
     } else {
-        currentEpisode--;
+        newIndex = currentEpisode - 1;
     }
-    renderVideoPlayer();
+    navigateToEpisode(newIndex);
 }
 
 // Navega para o próximo episódio
 function handleNextEpisode() {
     if (episodesList.length === 0) return;
+    let newIndex;
     if (currentEpisode === null) {
-        currentEpisode = 0;
+        newIndex = 0;
     } else if (currentEpisode >= episodesList.length - 1) {
-        currentEpisode = 0;
+        newIndex = 0;
     } else {
-        currentEpisode++;
+        newIndex = currentEpisode + 1;
     }
-    renderVideoPlayer();
+    navigateToEpisode(newIndex);
 }
 
 // ── Fanarts ───────────────────────────────────────────────────────────────────

@@ -219,7 +219,13 @@ def on_playback_complete(data):
     emit('view_accepted', {'episode': episode, 'views': views})
 
 
-# ── Rotas estáticas ───────────────────────────────────────────────────────────
+# ── Rotas estáticas e SPA ─────────────────────────────────────────────────────
+
+# Rotas SPA conhecidas — todas devolvem index.html para o JS tratar
+_SPA_ROUTES = re.compile(
+    r'^/(promo|ep\d+|rankings|fanarts|links)/?$',
+    re.IGNORECASE
+)
 
 
 @app.route('/')
@@ -229,7 +235,18 @@ def index():
 
 @app.route('/<path:path>')
 def serve_static(path):
-    return send_from_directory(STATIC_DIR, path)
+    # 1. Tenta servir como ficheiro estático real (css, js, imagens, etc.)
+    file_path = os.path.join(STATIC_DIR, path)
+    if os.path.isfile(file_path):
+        return send_from_directory(STATIC_DIR, path)
+
+    # 2. Rota SPA reconhecida → devolve index.html (o JS cuida do roteamento)
+    if _SPA_ROUTES.match('/' + path):
+        return send_from_directory(STATIC_DIR, 'index.html')
+
+    # 3. Fallback genérico: qualquer path desconhecido também devolve index.html
+    #    (evita 404 em deep links inesperados)
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 
 if __name__ == '__main__':
