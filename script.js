@@ -21,6 +21,57 @@ function emitPlaybackComplete(episodeKey) {
     else socket.once('connect', run);
 }
 
+// ── View após 10s assistidos (sem contar seek) ────────────────────────────────
+function attachViewAfterTenSeconds(videoEl, episodeKey) {
+    if (!videoEl) return;
+
+    let started = false;
+    let viewSent = false;
+    let watchedSeconds = 0;
+    let lastVideoTime = null;
+
+    const maybeStart = () => {
+        if (started) return;
+        started = true;
+        emitPlaybackStart(episodeKey);
+        lastVideoTime = videoEl.currentTime;
+    };
+
+    const onTimeUpdate = () => {
+        if (viewSent) return;
+        if (videoEl.paused || videoEl.seeking) return;
+
+        if (!started) maybeStart();
+
+        const t = videoEl.currentTime;
+        if (lastVideoTime == null) {
+            lastVideoTime = t;
+            return;
+        }
+
+        const delta = t - lastVideoTime;
+        lastVideoTime = t;
+
+        // Ignora jumps grandes (seek) e deltas negativos.
+        if (delta <= 0 || delta > 1.5) return;
+
+        watchedSeconds += delta;
+        if (watchedSeconds >= 10) {
+            viewSent = true;
+            emitPlaybackComplete(episodeKey);
+        }
+    };
+
+    const onSeeking = () => {
+        lastVideoTime = videoEl.currentTime;
+    };
+
+    // Se o usuário apertar play e ficar um tempo sem timeupdate (raro), ainda marcamos start.
+    videoEl.addEventListener('play', maybeStart);
+    videoEl.addEventListener('timeupdate', onTimeUpdate);
+    videoEl.addEventListener('seeking', onSeeking);
+}
+
 function updateViewsInDom(episodeKey, views) {
     const esc = episodeKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const statEl = document.querySelector(`#stats-container .stat-views[data-episode-key="${esc}"]`);
@@ -515,8 +566,7 @@ function renderVideoPlayer() {
     if (newVideo) {
         newVideo.load();
         const epKey = getEpisodeKey(selectedEpisode);
-        newVideo.addEventListener('play', () => emitPlaybackStart(epKey));
-        newVideo.addEventListener('ended', () => emitPlaybackComplete(epKey));
+        attachViewAfterTenSeconds(newVideo, epKey);
     }
 
     // Carrega stats imediatamente
