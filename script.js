@@ -56,7 +56,7 @@ function attachViewAfterTenSeconds(videoEl, episodeKey) {
         if (delta <= 0 || delta > 1.5) return;
 
         watchedSeconds += delta;
-        if (watchedSeconds >= 10) {
+        if (watchedSeconds >= 30) {
             viewSent = true;
             emitPlaybackComplete(episodeKey);
         }
