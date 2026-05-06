@@ -1,5 +1,5 @@
 from flask import Flask, send_from_directory, request, jsonify, session
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, disconnect
 import sqlite3
 import os
 import re
@@ -26,6 +26,10 @@ _EPISODE_KEY_RE = re.compile(r'^[\w\s.()\-\u00C0-\u024F]{1,200}$', re.UNICODE)
 # Conta view só após ~30*s (gatilho vem do cliente ao atingir 30*s assistidos).
 _MIN_ELAPSED_SECONDS = 25
 _MAX_ELAPSED_SECONDS = 6 * 3600
+
+# Controle de views por conexão Socket.IO (server-side, sem depender de cookie)
+_counted_by_sid = {}   # { sid: set(episode_keys) }
+_playback_by_sid = {}  # { sid: { episode: { started_at: float } } }
 
 
 def get_db():
@@ -73,11 +77,19 @@ def valid_episode_key(episode):
 
 
 def _session_playback():
-    return dict(session.get('playback') or {})
-
+    return _playback_by_sid.get(request.sid, {})
 
 def _session_counted():
-    return list(session.get('view_counted_episodes') or [])
+    return _counted_by_sid.get(request.sid, set())
+
+def _mark_counted(episode):
+    _counted_by_sid.setdefault(request.sid, set()).add(episode)
+
+def _set_playback(episode, data):
+    _playback_by_sid.setdefault(request.sid, {})[episode] = data
+
+def _clear_playback(episode):
+    _playback_by_sid.get(request.sid, {}).pop(episode, None)
 
 
 def _broadcast_views(episode, views):
@@ -143,6 +155,12 @@ def register_vote(episode):
 
 # ── Socket.IO (playback → view só no fim; tempos só na sessão assinada) ──────
 
+@socketio.on('disconnect')
+def on_disconnect():
+    """Libera memória ao desconectar."""
+    _counted_by_sid.pop(request.sid, None)
+    _playback_by_sid.pop(request.sid, None)
+
 
 @socketio.on('playback_start')
 def on_playback_start(data):
@@ -152,11 +170,7 @@ def on_playback_start(data):
     if not valid_episode_key(episode):
         emit('playback_error', {'code': 'invalid_episode'})
         return
-
-    pb = _session_playback()
-    pb[episode] = {'started_at': time.time()}
-    session['playback'] = pb
-    session.modified = True
+    _set_playback(episode, {'started_at': time.time()})
 
 
 @socketio.on('playback_complete')
@@ -174,7 +188,7 @@ def on_playback_complete(data):
         return
 
     pb = _session_playback()
-    info = dict(pb.get(episode) or {})
+    info = pb.get(episode, {})
     if 'started_at' not in info:
         emit('view_rejected', {'episode': episode, 'code': 'no_start'})
         return
@@ -185,36 +199,18 @@ def on_playback_complete(data):
         emit('view_rejected', {'episode': episode, 'code': 'no_start'})
         return
 
-    ended_at = time.time()
-    info['ended_at'] = ended_at
-    pb[episode] = info
-    session['playback'] = pb
-    session.modified = True
-
-    elapsed = ended_at - started_at
+    elapsed = time.time() - started_at
     if elapsed < _MIN_ELAPSED_SECONDS:
-        info.pop('ended_at', None)
-        pb[episode] = info
-        session['playback'] = pb
-        session.modified = True
         emit('view_rejected', {'episode': episode, 'code': 'too_short'})
         return
 
     if elapsed > _MAX_ELAPSED_SECONDS:
-        new_pb = dict(pb)
-        new_pb.pop(episode, None)
-        session['playback'] = new_pb
-        session.modified = True
+        _clear_playback(episode)
         emit('view_rejected', {'episode': episode, 'code': 'session_expired'})
         return
 
-    counted = counted + [episode]
-    session['view_counted_episodes'] = counted
-
-    new_pb = dict(pb)
-    new_pb.pop(episode, None)
-    session['playback'] = new_pb
-    session.modified = True
+    _mark_counted(episode)
+    _clear_playback(episode)
 
     views = increment_view_and_broadcast(episode)
     emit('view_accepted', {'episode': episode, 'views': views})
