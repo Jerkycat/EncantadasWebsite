@@ -23,8 +23,8 @@ socketio = SocketIO(app, async_mode='threading')
 _EPISODE_KEY_RE = re.compile(r'^[\w\s.()\-\u00C0-\u024F]{1,200}$', re.UNICODE)
 
 # Sessão Flask = cookie assinado (itsdangerous). Só usamos started_at / ended_at do servidor.
-# Conta view só após ~30*s (gatilho vem do cliente ao atingir 30*s assistidos).
-_MIN_ELAPSED_SECONDS = 25
+# Conta view só após ~10*s (gatilho vem do cliente ao atingir 15*s assistidos).
+_MIN_ELAPSED_SECONDS = 10
 _MAX_ELAPSED_SECONDS = 6 * 3600
 
 # Controle de views por conexão Socket.IO (server-side, sem depender de cookie)

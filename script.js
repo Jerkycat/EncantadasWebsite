@@ -56,7 +56,7 @@ function attachViewAfterTenSeconds(videoEl, episodeKey) {
         if (delta <= 0 || delta > 1.5) return;
 
         watchedSeconds += delta;
-        if (watchedSeconds >= 30) {
+        if (watchedSeconds >= 15) {
             viewSent = true;
             emitPlaybackComplete(episodeKey);
         }
@@ -66,10 +66,20 @@ function attachViewAfterTenSeconds(videoEl, episodeKey) {
         lastVideoTime = videoEl.currentTime;
     };
 
+    const onEnded = () => {
+    if (viewSent) return;
+    // Só conta se assistiu a maior parte (ex: pelo menos metade do mínimo)
+    if (watchedSeconds >= Math.min(10, videoEl.duration * 0.5)) {
+        viewSent = true;
+        emitPlaybackComplete(episodeKey);
+    }
+    };
+
     // Se o usuário apertar play e ficar um tempo sem timeupdate (raro), ainda marcamos start.
     videoEl.addEventListener('play', maybeStart);
     videoEl.addEventListener('timeupdate', onTimeUpdate);
     videoEl.addEventListener('seeking', onSeeking);
+    videoEl.addEventListener('ended', onEnded);
 }
 
 function updateViewsInDom(episodeKey, views) {
